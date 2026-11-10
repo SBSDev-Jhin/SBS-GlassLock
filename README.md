@@ -90,6 +90,11 @@ Prefer a ready-made source archive? Download `sbs-glasslock-<version>.tar.gz` fr
 - [Original XSecureLock README and full option list](README.upstream.md)
 - [Changelog](CHANGELOG.md) · [Credits](CREDITS.md) · [Contributing](CONTRIBUTING.md) · [Spanish README](README.es.md)
 
+## Credits
+
+Built on [XSecureLock](https://github.com/google/xsecurelock) by Google, inspired by xtrlock, and relying on
+Linux-PAM, fprintd/libfprint and X.Org. Full list with links: [CREDITS.md](CREDITS.md).
+
 ## License
 
 Apache License 2.0, the same as upstream. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

@@ -17,18 +17,32 @@ repository so every original author stays credited.
 Changes: transparent lock windows, status dot, parallel fingerprint and password authentication, PAM service files,
 installer and documentation.
 
-## Components it depends on (not included in this repository)
+## Projects this work is based on or inspired by
 
-| Component | Used for | License |
-|-----------|----------|---------|
-| Xlib and X11 extensions (Xext, Xcomposite, XScreenSaver, Xrandr, Xfixes) | windows, input grabs, multi-monitor | MIT/X11 |
-| Xft, fontconfig | text rendering | MIT/X11 style |
-| Linux-PAM | authentication | BSD-style / GPL (see the project) |
-| fprintd and libfprint (optional) | fingerprint reader | GPL / LGPL (see each project) |
+| Project | Role | Link |
+|---------|------|------|
+| **XSecureLock** (Google) | **Code base.** SBS GlassLock is a fork of it. | <https://github.com/google/xsecurelock> |
+| **xtrlock** | **Inspiration.** The idea of a lock that leaves the screen visible comes from it. No xtrlock code is used. | <https://packages.debian.org/xtrlock> (Debian package page) |
 
-Each keeps its own license. Their names belong to their respective owners.
+## Projects it depends on or works with (not included in this repository)
 
-## Tested with
+| Project | Used for | Link | License |
+|---------|----------|------|---------|
+| Linux-PAM | authentication | <https://github.com/linux-pam/linux-pam> | BSD-style / GPL |
+| fprintd | fingerprint authentication (optional) | <https://gitlab.freedesktop.org/libfprint/fprintd> | GPL |
+| libfprint | fingerprint reader drivers (optional, via fprintd) | <https://gitlab.freedesktop.org/libfprint/libfprint> | LGPL |
+| X.Org (Xlib, Xext, Xcomposite, XScreenSaver, Xrandr, Xfixes, Xmu) | windows, input grabs, multi-monitor | <https://gitlab.freedesktop.org/xorg> | MIT/X11 |
+| Xft and fontconfig | text rendering | <https://gitlab.freedesktop.org/fontconfig/fontconfig> | MIT style |
+| xss-lock, xautolock, XScreenSaver | optional tools that upstream XSecureLock documents for auto-locking and savers; not required here | see upstream README | see each project |
 
-KDE Plasma (KWin) as the compositing environment during development. KDE is a trademark of KDE e.V.; no endorsement is
-implied.
+Each project keeps its own license and copyright; their names belong to their respective owners.
+
+## Developed and tested with
+
+KDE Plasma and its window manager KWin (<https://invent.kde.org/plasma/kwin>) as the compositing environment during
+development, on Parrot OS (Debian-based). KDE is a trademark of KDE e.V.; no endorsement is implied.
+
+## Thanks
+
+To the authors and maintainers of all the projects above, and to everyone who has contributed to XSecureLock upstream.
+If we forgot to credit you or a project, please open an issue and we will fix it.

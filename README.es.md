@@ -55,6 +55,11 @@ Después asigna `~/.local/bin/sbs-glasslock` a un atajo de teclado (ejemplos en 
 Más información (en inglés): [instalación](docs/INSTALL.md), [compatibilidad](docs/COMPATIBILITY.md),
 [funcionamiento](docs/HOW-IT-WORKS.md).
 
+## Créditos
+
+Construido sobre [XSecureLock](https://github.com/google/xsecurelock) de Google, inspirado en xtrlock, y apoyado en
+Linux-PAM, fprintd/libfprint y X.Org. Lista completa con enlaces: [CREDITS.md](CREDITS.md).
+
 ## Licencia
 
 Apache License 2.0, igual que el original. Trabajo original © Google Inc.; modificaciones © 2026 SmartBrain
