@@ -46,3 +46,20 @@
 # Doxygen stuff.
 /doxy
 /doxyfile.stamp
+
+# SBS GlassLock build output
+*.o
+/xsecurelock
+/auth_x11
+/authproto_pam
+/dimmer
+/until_nonidle
+/saver_multiplex
+/pgrp_placeholder
+/cat_authproto
+/get_compositor
+/nvidia_break_compositor
+/remap_all
+/env_helpstr.inc
+/Doxyfile
+/version.c

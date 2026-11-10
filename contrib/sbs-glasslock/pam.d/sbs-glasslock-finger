@@ -1,0 +1,5 @@
+# SBS GlassLock - fingerprint-only PAM service. Installed to /etc/pam.d/sbs-glasslock-finger by install.sh.
+# Needs fprintd + libpam-fprintd and an enrolled finger. Runs in parallel with sbs-glasslock-password.
+auth    sufficient pam_fprintd.so max-tries=1 timeout=30
+auth    required   pam_deny.so
+@include common-account

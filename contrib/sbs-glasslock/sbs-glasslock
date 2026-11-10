@@ -1,0 +1,16 @@
+#!/bin/bash
+# SBS GlassLock launcher: transparent screen lock (the desktop stays visible), a tiny green/red status dot,
+# password and fingerprint accepted in parallel. Bind this command to a keyboard shortcut.
+PREFIX="${SBS_GLASSLOCK_PREFIX:-$HOME/.local/sbs-glasslock}"
+
+export XSECURELOCK_TRANSPARENT=1
+export XSECURELOCK_MINIMAL_DIALOG=1
+export XSECURELOCK_PAM_SERVICE=sbs-glasslock-password
+export XSECURELOCK_FINGER_PAM_SERVICE=sbs-glasslock-finger   # delete this line if you have no fingerprint reader
+export XSECURELOCK_SAVER=saver_blank
+export XSECURELOCK_BLANK_TIMEOUT=-1
+export XSECURELOCK_SHOW_DATETIME=0
+export XSECURELOCK_SHOW_HOSTNAME=0
+export XSECURELOCK_SHOW_USERNAME=0
+
+exec "$PREFIX/bin/xsecurelock"

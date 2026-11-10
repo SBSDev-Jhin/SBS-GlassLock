@@ -1,0 +1,12 @@
+SBS GlassLock
+Copyright 2026 SmartBrain Services, S.A.S. de C.V. (https://smartbrainservices.com)
+
+This product is a modified version of XSecureLock.
+
+XSecureLock
+Copyright 2014 Google Inc. All rights reserved.
+https://github.com/google/xsecurelock
+Licensed under the Apache License, Version 2.0.
+
+Modified files carry a notice stating that they were changed. The complete list of changes is available in the git
+history and in docs/HOW-IT-WORKS.md.

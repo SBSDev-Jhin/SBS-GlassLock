@@ -177,14 +177,14 @@ endif
 doc_DATA = \
 	CONTRIBUTING \
 	LICENSE \
-	README.md
+	README.upstream.md
 
 if HAVE_PANDOC
 man1_MANS = xsecurelock.1
-xsecurelock.1.md: doc/xsecurelock.1.md README.md
+xsecurelock.1.md: doc/xsecurelock.1.md README.upstream.md
 	{ \
 		grep -B 9999 'ENV VARIABLES HERE' doc/xsecurelock.1.md; \
-		grep -A 9999 'ENV VARIABLES START' README.md |\
+		grep -A 9999 'ENV VARIABLES START' README.upstream.md |\
 			grep -B 9999 'ENV VARIABLES END'; \
 		grep -A 9999 'ENV VARIABLES HERE' doc/xsecurelock.1.md; \
 	} > xsecurelock.1.md
@@ -225,7 +225,7 @@ version.c: FORCE
 	fi
 .PRECIOUS: version.c  # Old one is better than none.
 
-env_helpstr.inc: README.md # Autogenerate for --help.
+env_helpstr.inc: README.upstream.md # Autogenerate for --help.
 	grep -A 9999 'ENV VARIABLES START' "$<" |\
 		grep -B 9999 'ENV VARIABLES END' |\
 		grep '^[ *]' |\
@@ -235,7 +235,7 @@ xsecurelock-main.$(OBJEXT): env_helpstr.inc
 EXTRA_DIST = \
 	CONTRIBUTING \
 	LICENSE \
-	README.md \
+	README.upstream.md \
 	autogen.sh \
 	doc/xsecurelock.1.md \
 	ensure-documented-settings.sh \

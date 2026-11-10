@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/*
+ * Modified in 2026 by SmartBrain Services, S.A.S. de C.V. (SBS GlassLock).
+ * Adds XSECURELOCK_MINIMAL_DIALOG (status dot), XSECURELOCK_HIDE_DIALOG and XSECURELOCK_FINGER_PAM_SERVICE (parallel fingerprint attempt).
+ * The original copyright and license above are unchanged.
+ */
+
 #include <X11/X.h>     // for Success, None, Atom, KBBellPitch
 #include <X11/Xlib.h>  // for DefaultScreen, Screen, XFree, True
 #include <locale.h>    // for NULL, setlocale, LC_CTYPE, LC_TIME
@@ -23,6 +29,9 @@ limitations under the License.
 #include <sys/select.h>  // for timeval, select, fd_set, FD_SET
 #include <sys/time.h>    // for gettimeofday, timeval
 #include <time.h>        // for time, nanosleep, localtime_r
+#include <X11/extensions/shape.h>  // for XShapeCombineMask
+#include <signal.h>      // for kill, SIGTERM
+#include <sys/wait.h>    // for waitpid
 #include <unistd.h>      // for close, _exit, dup2, pipe, dup
 
 #if __STDC_VERSION__ >= 199901L
@@ -68,6 +77,19 @@ char *const *argv;
 
 //! The authproto helper to use.
 const char *authproto_executable;
+
+//! If set, the dialog is replaced by a tiny green/red status dot.
+int minimal_dialog;
+//! PAM service used for a parallel fingerprint-only attempt (or NULL).
+const char *finger_service;
+int finger_fd = -1;
+int finger_resp_fd = -1;
+pid_t finger_pid = -1;
+time_t finger_last_start;
+int finger_success;
+//! The status dot stays red until this time (set on auth errors).
+time_t dot_red_until;
+#define DOT_SIZE 9
 
 //! The blinking interval in microseconds.
 #define BLINK_INTERVAL (250 * 1000)
@@ -571,6 +593,11 @@ void CreateOrUpdatePerMonitorWindow(size_t i, const Monitor *monitor,
   int h = region_h;
   int x = monitor->x + (monitor->width - w) / 2 + x_offset;
   int y = monitor->y + (monitor->height - h) / 2 + y_offset;
+  if (minimal_dialog) {
+    // Tuck the status dot into the top-right corner of each monitor.
+    x = monitor->x + monitor->width - w - 10;
+    y = monitor->y + 10;
+  }
   // Clip to monitor.
   if (x < 0) {
     w += x;
@@ -610,9 +637,15 @@ void CreateOrUpdatePerMonitorWindow(size_t i, const Monitor *monitor,
     windows[i] = main_window;
   } else {
     // Create a new window.
-    windows[i] =
-        XCreateWindow(display, parent_window, x, y, w, h, 0, CopyFromParent,
-                      InputOutput, CopyFromParent, CWBackPixel, &attrs);
+    // Always use the default visual: the parent may be a 32-bit ARGB window
+    // (XSECURELOCK_TRANSPARENT), but we draw with the default visual (Xft).
+    attrs.border_pixel = 0;
+    attrs.colormap = DefaultColormap(display, DefaultScreen(display));
+    windows[i] = XCreateWindow(
+        display, parent_window, x, y, w, h, 0,
+        DefaultDepth(display, DefaultScreen(display)), InputOutput,
+        DefaultVisual(display, DefaultScreen(display)),
+        CWBackPixel | CWBorderPixel | CWColormap, &attrs);
     SetWMProperties(display, windows[i], "xsecurelock", "auth_x11_screen", argc,
                     argv);
     // We should always make sure that main_window stays on top of all others.
@@ -648,8 +681,11 @@ void CreateOrUpdatePerMonitorWindow(size_t i, const Monitor *monitor,
       DefaultColormap(display, DefaultScreen(display)));
 #endif
 
-  // This window is now ready to use.
-  XMapWindow(display, windows[i]);
+  // This window is now ready to use. With XSECURELOCK_HIDE_DIALOG it stays
+  // unmapped, so typing a password shows nothing at all (like xtrlock).
+  if (!GetIntSetting("XSECURELOCK_HIDE_DIALOG", 0)) {
+    XMapWindow(display, windows[i]);
+  }
   num_windows = i + 1;
 }
 
@@ -817,6 +853,48 @@ void BuildTitle(char *output, size_t output_size, const char *input) {
   output[output_size - 1] = 0;
 }
 
+/*! \brief Minimal status indicator: a small green (waiting) or red (error) dot. */
+static void DisplayDot(int is_warning) {
+  static int init = 0;
+  static unsigned long green_px, red_px;
+  static Pixmap mask = None;
+  if (!init) {
+    Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+    XColor c, exact;
+    green_px = BlackPixel(display, DefaultScreen(display));
+    red_px = green_px;
+    if (XAllocNamedColor(display, cmap, "#2ecc71", &c, &exact)) {
+      green_px = c.pixel;
+    }
+    if (XAllocNamedColor(display, cmap, "#e74c3c", &c, &exact)) {
+      red_px = c.pixel;
+    }
+    mask = XCreatePixmap(display, main_window, DOT_SIZE, DOT_SIZE, 1);
+    GC mgc = XCreateGC(display, mask, 0, NULL);
+    XSetForeground(display, mgc, 0);
+    XFillRectangle(display, mask, mgc, 0, 0, DOT_SIZE, DOT_SIZE);
+    XSetForeground(display, mgc, 1);
+    XFillArc(display, mask, mgc, 0, 0, DOT_SIZE - 1, DOT_SIZE - 1, 0, 360 * 64);
+    XFreeGC(display, mgc);
+    init = 1;
+  }
+  time_t now = time(NULL);
+  if (is_warning) {
+    dot_red_until = now + 2;
+  }
+  unsigned long px = now < dot_red_until ? red_px : green_px;
+
+  UpdatePerMonitorWindows(per_monitor_windows_dirty, DOT_SIZE, DOT_SIZE, 0, 0);
+  per_monitor_windows_dirty = 0;
+  for (size_t i = 0; i < num_windows; ++i) {
+    XShapeCombineMask(display, windows[i], ShapeBounding, 0, 0, mask,
+                      ShapeSet);
+    XSetWindowBackground(display, windows[i], px);
+    XClearWindow(display, windows[i]);
+  }
+  XFlush(display);
+}
+
 /*! \brief Display a string in the window.
  *
  * The given title and message will be displayed on all screens. In case caps
@@ -827,6 +905,10 @@ void BuildTitle(char *output, size_t output_size, const char *input) {
  * \param is_warning Whether to use the warning style to display the message.
  */
 void DisplayMessage(const char *title, const char *str, int is_warning) {
+  if (minimal_dialog) {
+    DisplayDot(is_warning);
+    return;
+  }
   char full_title[256];
   BuildTitle(full_title, sizeof(full_title), title);
 
@@ -1030,6 +1112,108 @@ void ShowFromArray(const char **array, size_t displaymarker, char *displaybuf,
   *displaylen = strlen(selection);
 }
 
+/*! \brief Starts a fingerprint-only PAM attempt in the background. */
+static void StartFinger(void) {
+  if (finger_service == NULL || finger_pid > 0) {
+    return;
+  }
+  int req[2], resp[2];
+  if (pipe(req)) {
+    LogErrno("pipe");
+    return;
+  }
+  if (pipe(resp)) {
+    LogErrno("pipe");
+    close(req[0]);
+    close(req[1]);
+    return;
+  }
+  finger_last_start = time(NULL);
+  pid_t pid = ForkWithoutSigHandlers();
+  if (pid == -1) {
+    LogErrno("fork");
+    return;
+  }
+  if (pid == 0) {
+    close(req[0]);
+    close(resp[1]);
+    int in = dup(resp[0]);
+    int out = dup(req[1]);
+    if (in == -1 || out == -1 || dup2(in, 0) == -1 || dup2(out, 1) == -1) {
+      LogErrno("dup2");
+      _exit(EXIT_FAILURE);
+    }
+    setenv("XSECURELOCK_PAM_SERVICE", finger_service, 1);
+    const char *args[2] = {authproto_executable, NULL};
+    ExecvHelper(authproto_executable, args);
+    _exit(EXIT_FAILURE);
+  }
+  close(req[1]);
+  close(resp[0]);
+  finger_fd = req[0];
+  finger_resp_fd = resp[1];
+  finger_pid = pid;
+}
+
+static void StopFinger(void) {
+  if (finger_fd >= 0) {
+    close(finger_fd);
+    finger_fd = -1;
+  }
+  if (finger_resp_fd >= 0) {
+    close(finger_resp_fd);
+    finger_resp_fd = -1;
+  }
+  if (finger_pid > 0) {
+    kill(finger_pid, SIGTERM);
+    int st;
+    waitpid(finger_pid, &st, 0);
+    finger_pid = -1;
+  }
+}
+
+/*! \brief Handles data from the fingerprint child.
+ *
+ * \return 1 if the fingerprint was accepted, 0 otherwise.
+ */
+static int PollFinger(void) {
+  char *message = NULL;
+  char type = ReadPacket(finger_fd, &message, 1);
+  switch (type) {
+    case PTYPE_INFO_MESSAGE:
+    case PTYPE_ERROR_MESSAGE:
+      break;
+    case PTYPE_PROMPT_LIKE_USERNAME:
+    case PTYPE_PROMPT_LIKE_PASSWORD:
+      WritePacket(finger_resp_fd, PTYPE_RESPONSE_CANCELLED, "");
+      break;
+    case 0: {
+      int st = 1;
+      close(finger_fd);
+      finger_fd = -1;
+      close(finger_resp_fd);
+      finger_resp_fd = -1;
+      if (finger_pid > 0) {
+        waitpid(finger_pid, &st, 0);
+        finger_pid = -1;
+      }
+      if (st == 0) {
+        finger_success = 1;
+        return 1;
+      }
+      dot_red_until = time(NULL) + 2;
+      return 0;
+    }
+    default:
+      break;
+  }
+  if (message != NULL) {
+    explicit_bzero(message, strlen(message));
+    free(message);
+  }
+  return 0;
+}
+
 /*! \brief Ask a question to the user.
  *
  * \param msg The message.
@@ -1229,7 +1413,16 @@ int Prompt(const char *msg, char **response, int echo) {
       memset(&set, 0, sizeof(set));  // For clang-analyzer.
       FD_ZERO(&set);
       FD_SET(0, &set);
-      int nfds = select(1, &set, NULL, NULL, &timeout);
+      int maxfd = 0;
+      if (finger_service != NULL && finger_fd < 0 && finger_pid <= 0 &&
+          time(NULL) - finger_last_start >= 2) {
+        StartFinger();
+      }
+      if (finger_fd >= 0) {
+        FD_SET(finger_fd, &set);
+        maxfd = finger_fd;
+      }
+      int nfds = select(maxfd + 1, &set, NULL, NULL, &timeout);
       if (nfds < 0) {
         LogErrno("select");
         done = 1;
@@ -1248,6 +1441,16 @@ int Prompt(const char *msg, char **response, int echo) {
       if (nfds == 0) {
         // Blink...
         break;
+      }
+      if (finger_fd >= 0 && FD_ISSET(finger_fd, &set)) {
+        if (PollFinger()) {
+          status = 0;
+          done = 1;
+          break;
+        }
+        if (!FD_ISSET(0, &set)) {
+          continue;
+        }
       }
 
       // From now on, only do nonblocking selects so we update the screen ASAP.
@@ -1444,6 +1647,8 @@ int Authenticate() {
   // Otherwise, we're in the parent process.
   close(requestfd[1]);
   close(responsefd[0]);
+  StartFinger();
+  int sent_password = 0;
   for (;;) {
     char *message;
     char *response;
@@ -1476,7 +1681,12 @@ int Authenticate() {
         DisplayMessage("Processing...", "", 0);
         break;
       case PTYPE_PROMPT_LIKE_PASSWORD:
+        if (sent_password) {
+          // PAM is asking again, so the previous password was rejected.
+          dot_red_until = time(NULL) + 2;
+        }
         if (Prompt(message, &response, 0)) {
+          sent_password = 1;
           WritePacket(responsefd[1], PTYPE_RESPONSE_LIKE_PASSWORD, response);
           explicit_bzero(response, strlen(response));
           free(response);
@@ -1485,6 +1695,10 @@ int Authenticate() {
         }
         explicit_bzero(message, strlen(message));
         free(message);
+        if (finger_success) {
+          kill(childpid, SIGKILL);
+          goto done;
+        }
         DisplayMessage("Processing...", "", 0);
         break;
       case 0:
@@ -1503,6 +1717,10 @@ done:
   if (!WaitProc("authproto", &childpid, 1, 0, &status)) {
     Log("WaitPgrp returned false but we were blocking");
     abort();
+  }
+  StopFinger();
+  if (finger_success) {
+    status = 0;
   }
   if (status == 0) {
     PlaySound(SOUND_SUCCESS);
@@ -1576,6 +1794,11 @@ int main(int argc_local, char **argv_local) {
 
   authproto_executable = GetExecutablePathSetting("XSECURELOCK_AUTHPROTO",
                                                   AUTHPROTO_EXECUTABLE, 0);
+  minimal_dialog = GetIntSetting("XSECURELOCK_MINIMAL_DIALOG", 0);
+  finger_service = GetStringSetting("XSECURELOCK_FINGER_PAM_SERVICE", "");
+  if (!*finger_service) {
+    finger_service = NULL;
+  }
 
   // Unless disabled, we shift the login prompt randomly around by a few
   // pixels. This should mostly mitigate burn-in effects from the prompt
@@ -1740,6 +1963,13 @@ int main(int argc_local, char **argv_local) {
   InitWaitPgrp();
 
   int status = Authenticate();
+
+  if (status != 0 && minimal_dialog && num_windows > 0) {
+    // Show the red dot briefly so a failed attempt is noticeable.
+    DisplayDot(1);
+    struct timespec red_time = {1, 500000000};  // Not cut short by keys.
+    nanosleep(&red_time, NULL);
+  }
 
   // Clear any possible processing message by closing our windows.
   DestroyPerMonitorWindows(0);

@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/*
+ * Modified in 2026 by SmartBrain Services, S.A.S. de C.V. (SBS GlassLock).
+ * Adds XSECURELOCK_TRANSPARENT: the lock windows use a 32-bit ARGB visual with alpha 0 so the desktop stays visible.
+ * The original copyright and license above are unchanged.
+ */
+
 /*!
  *\brief XSecureLock.
  *
@@ -135,6 +141,8 @@ char *const *notify_command = NULL;
 #ifdef HAVE_XCOMPOSITE_EXT
 //! Do not use XComposite to cover transparent notifications.
 int no_composite = 0;
+//! Whether the lock windows are transparent, leaving the desktop visible.
+int transparent = 0;
 //! Create an almost-fullscreen sized "obscurer window" against bad compositors.
 int composite_obscurer = 0;
 #endif
@@ -433,6 +441,11 @@ void LoadDefaults() {
 #ifdef HAVE_XCOMPOSITE_EXT
   no_composite = GetIntSetting("XSECURELOCK_NO_COMPOSITE", 0);
   composite_obscurer = GetIntSetting("XSECURELOCK_COMPOSITE_OBSCURER", 1);
+  transparent = GetIntSetting("XSECURELOCK_TRANSPARENT", 0);
+  if (transparent) {
+    no_composite = 1;
+    composite_obscurer = 0;
+  }
 #endif
   have_switch_user_command =
       *GetStringSetting("XSECURELOCK_SWITCH_USER_COMMAND", "");
@@ -923,22 +936,63 @@ int main(int argc, char **argv) {
   // auth_window is a window exclusively used by the auth child. It will only be
   // mapped during auth, and hidden otherwise. These windows are separated
   // because XScreenSaver's savers might XUngrabKeyboard on their window.
-  Window background_window = XCreateWindow(
-      display, parent_window, 0, 0, w, h, 0, CopyFromParent, InputOutput,
-      CopyFromParent, CWBackPixel | CWSaveUnder | CWOverrideRedirect | CWCursor,
-      &coverattrs);
+  XVisualInfo argb_vinfo;
+  if (transparent &&
+      !XMatchVisualInfo(display, DefaultScreen(display), 32, TrueColor,
+                        &argb_vinfo)) {
+    Log("No 32-bit ARGB visual available, transparency disabled");
+    transparent = 0;
+  }
+  Window background_window;
+  Window saver_window;
+  if (transparent) {
+    XSetWindowAttributes argbattrs = coverattrs;
+    argbattrs.background_pixel = 0;  // Alpha 0: fully transparent.
+    argbattrs.border_pixel = 0;
+    argbattrs.save_under = 0;
+    argbattrs.colormap = XCreateColormap(display, root_window,
+                                         argb_vinfo.visual, AllocNone);
+    background_window = XCreateWindow(
+        display, parent_window, 0, 0, w, h, 0, 32, InputOutput,
+        argb_vinfo.visual,
+        CWBackPixel | CWBorderPixel | CWColormap | CWOverrideRedirect |
+            CWCursor,
+        &argbattrs);
+    saver_window = XCreateWindow(
+        display, background_window, 0, 0, w, h, 0, 32, InputOutput,
+        argb_vinfo.visual, CWBackPixel | CWBorderPixel | CWColormap,
+        &argbattrs);
+  } else {
+    background_window = XCreateWindow(
+        display, parent_window, 0, 0, w, h, 0, CopyFromParent, InputOutput,
+        CopyFromParent,
+        CWBackPixel | CWSaveUnder | CWOverrideRedirect | CWCursor, &coverattrs);
+    saver_window =
+        XCreateWindow(display, background_window, 0, 0, w, h, 0, CopyFromParent,
+                      InputOutput, CopyFromParent, CWBackPixel, &coverattrs);
+  }
   SetWMProperties(display, background_window, "xsecurelock", "background", argc,
                   argv);
   my_windows[n_my_windows++] = background_window;
-  Window saver_window =
-      XCreateWindow(display, background_window, 0, 0, w, h, 0, CopyFromParent,
-                    InputOutput, CopyFromParent, CWBackPixel, &coverattrs);
   SetWMProperties(display, saver_window, "xsecurelock", "saver", argc, argv);
   my_windows[n_my_windows++] = saver_window;
 
-  Window auth_window =
-      XCreateWindow(display, background_window, 0, 0, w, h, 0, CopyFromParent,
-                    InputOutput, CopyFromParent, CWBackPixel, &coverattrs);
+  Window auth_window;
+  if (transparent) {
+    // auth_x11 draws with the default visual, so keep this window on it.
+    XSetWindowAttributes authattrs = coverattrs;
+    authattrs.border_pixel = 0;
+    authattrs.colormap = DefaultColormap(display, DefaultScreen(display));
+    auth_window = XCreateWindow(
+        display, background_window, 0, 0, w, h, 0,
+        DefaultDepth(display, DefaultScreen(display)), InputOutput,
+        DefaultVisual(display, DefaultScreen(display)),
+        CWBackPixel | CWBorderPixel | CWColormap, &authattrs);
+  } else {
+    auth_window =
+        XCreateWindow(display, background_window, 0, 0, w, h, 0, CopyFromParent,
+                      InputOutput, CopyFromParent, CWBackPixel, &coverattrs);
+  }
   SetWMProperties(display, auth_window, "xsecurelock", "auth", argc, argv);
   my_windows[n_my_windows++] = auth_window;
 
@@ -976,7 +1030,7 @@ int main(int argc, char **argv) {
   // Bypass compositing, just in case.
   Atom dont_composite_atom =
       XInternAtom(display, "_NET_WM_BYPASS_COMPOSITOR", False);
-  long dont_composite = 1;
+  long dont_composite = transparent ? 0 : 1;
   XChangeProperty(display, background_window, dont_composite_atom, XA_CARDINAL,
                   32, PropModeReplace, (const unsigned char *)&dont_composite,
                   1);

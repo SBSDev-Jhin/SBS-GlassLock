@@ -49,7 +49,7 @@ public_settings=$(
 
 # List all documented settings.
 documented_settings=$(
-	<README.md perl -ne '
+	<README.upstream.md perl -ne '
 		if (/ENV VARIABLES START/../ENV VARIABLES_END/) {
 			print "$_\n" for /^\* +\`(XSECURELOCK_[A-Za-z0-9_%]+)\`/g;
 		}
