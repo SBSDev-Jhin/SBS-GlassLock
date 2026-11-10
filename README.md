@@ -53,7 +53,7 @@ sudo apt install build-essential autoconf automake pkg-config libx11-dev libxext
   libxss-dev libpam0g-dev libxft-dev libxrandr-dev libxfixes-dev libxmu-dev libxmuu-dev
 
 # 2. get the code and install (asks for sudo once, only to create two PAM service files)
-git clone https://github.com/<owner>/sbs-glasslock.git && cd sbs-glasslock
+git clone https://github.com/SBSDev-Jhin/sbs-glasslock.git && cd sbs-glasslock
 bash contrib/sbs-glasslock/install.sh            # add --no-fingerprint if you have no fingerprint reader
 
 # 3. test it safely: it unlocks itself after 30 seconds

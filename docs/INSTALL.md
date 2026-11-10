@@ -27,7 +27,7 @@ sudo pacman -S base-devel libx11 libxext libxcomposite libxss pam libxft libxran
 ## 2. Install
 
 ```bash
-git clone https://github.com/<owner>/sbs-glasslock.git
+git clone https://github.com/SBSDev-Jhin/sbs-glasslock.git
 cd sbs-glasslock
 bash contrib/sbs-glasslock/install.sh            # or: --no-fingerprint
 ```
