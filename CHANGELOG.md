@@ -2,6 +2,17 @@
 
 All notable changes to SBS GlassLock. Versions follow `MAJOR.MINOR.PATCH`; the upstream base is noted for each.
 
+## [1.0.1] - 2026-11-10
+
+### Fixed
+- The status dot no longer flickers between red and green when the fingerprint reader is unavailable (no device,
+  `fprintd` stuck). A fingerprint PAM service that exits in under 1.5 s is now treated as "reader unavailable":
+  the dot stays green and the reader is retried after ~10 s instead of every 2 s. Red is shown only for a real
+  failed scan or a wrong password.
+
+### Documentation
+- Troubleshooting entry for a wedged fingerprint reader (`endpoint stalled`) and how to power-cycle its USB port.
+
 ## [1.0.0] - 2026-11-10
 
 First public release. Based on upstream XSecureLock 1.9.0 (commit `98fc8a3`).

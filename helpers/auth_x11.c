@@ -86,6 +86,8 @@ int finger_fd = -1;
 int finger_resp_fd = -1;
 pid_t finger_pid = -1;
 time_t finger_last_start;
+struct timespec finger_start_mono;
+int finger_unavailable;
 int finger_success;
 //! The status dot stays red until this time (set on auth errors).
 time_t dot_red_until;
@@ -1129,6 +1131,7 @@ static void StartFinger(void) {
     return;
   }
   finger_last_start = time(NULL);
+  clock_gettime(CLOCK_MONOTONIC, &finger_start_mono);
   pid_t pid = ForkWithoutSigHandlers();
   if (pid == -1) {
     LogErrno("fork");
@@ -1201,7 +1204,20 @@ static int PollFinger(void) {
         finger_success = 1;
         return 1;
       }
-      dot_red_until = time(NULL) + 2;
+      // A real failed scan takes a while (the user touches the reader). If the
+      // PAM service dies almost instantly the reader is unavailable (no device,
+      // fprintd stuck): do not flash red, and back off before retrying.
+      struct timespec now_mono;
+      clock_gettime(CLOCK_MONOTONIC, &now_mono);
+      double elapsed = (now_mono.tv_sec - finger_start_mono.tv_sec) +
+                       (now_mono.tv_nsec - finger_start_mono.tv_nsec) / 1e9;
+      if (elapsed < 1.5) {
+        finger_unavailable = 1;
+        finger_last_start = time(NULL) + 8;  // retry in ~10 s
+      } else {
+        finger_unavailable = 0;
+        dot_red_until = time(NULL) + 2;
+      }
       return 0;
     }
     default:

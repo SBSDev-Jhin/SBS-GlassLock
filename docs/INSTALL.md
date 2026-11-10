@@ -90,3 +90,19 @@ Then remove your keyboard shortcut.
 | `Could not find the program ...` from a shortcut | The shortcut command has spaces in its path. Use `~/.local/bin/sbs-glasslock`. |
 | Stuck locked | `Ctrl+Alt+F2`, log in, run `pkill -x xsecurelock`. |
 | Build error about missing headers | Install the dependencies in step 1. |
+
+### The fingerprint stops working (dot stays green, `fprintd-list` says "No devices available")
+
+The reader's firmware can hang (typically after a timed-out `sudo`/polkit fingerprint prompt). Restarting `fprintd`
+is not enough; power-cycle the reader's USB port. Find it with `lsusb` (vendor:product) and
+`grep -l <product-id> /sys/bus/usb/devices/*/idProduct`, then, for a device at `1-3`:
+
+```bash
+P=/sys/bus/usb/devices/usb1/1-0:1.0/usb1-port3      # port = the device's port number
+echo 1 | sudo tee $P/disable; sleep 4; echo 0 | sudo tee $P/disable; sleep 5
+sudo systemctl restart fprintd
+fprintd-list "$USER"                                   # your finger should be listed again
+```
+
+If that fails, shut the machine down completely for ~30 s and boot it again. The password keeps working meanwhile.
+
